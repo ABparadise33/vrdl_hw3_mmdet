@@ -156,6 +156,10 @@ python inference.py \
 ```
 
 Adaptive mode enables class-wise score thresholds and class-wise area filtering.
+The `--tta` mode uses a manual instance-segmentation TTA path instead of
+MMDetection's `DetTTAModel`, because MMDetection 3.3.0 asserts that mask TTA is
+not supported by the built-in wrapper. By default it runs scales
+`800 1000 1200` with horizontal flip and merges predictions with per-class NMS.
 Both modes write compressed COCO RLE submission files. The zip filename can be
 experiment-specific, but the JSON inside the zip is always named
 `test-results.json` for CodaBench submission.

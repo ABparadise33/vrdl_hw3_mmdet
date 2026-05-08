@@ -8,7 +8,7 @@ import json
 import os
 import zipfile
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Sequence, Tuple
 
 os.environ.setdefault("OPENCV_LOG_LEVEL", "SILENT")
 
@@ -50,115 +50,12 @@ def load_detector(config: str, checkpoint: str, device: str):
     return init_detector(config, checkpoint, device=device)
 
 
-def patch_mmdet_tta_mask_merge() -> None:
-    """Patch MMDetection mask TTA flip merging for torch tensors."""
-
-    import numpy as np
-    import torch
-    import mmdet.models.test_time_augs.merge_augs as merge_augs
-    import mmdet.models.roi_heads.cascade_roi_head as cascade_roi_head
-
-    def normalize_img_metas(img_metas, num_augs):
-        if isinstance(img_metas, dict):
-            split_metas = []
-            has_aug_lists = any(
-                isinstance(value, (list, tuple)) and len(value) == num_augs
-                for value in img_metas.values()
-            )
-            if has_aug_lists:
-                for idx in range(num_augs):
-                    split_metas.append(
-                        {
-                            key: value[idx]
-                            if isinstance(value, (list, tuple)) and len(value) == num_augs
-                            else value
-                            for key, value in img_metas.items()
-                        }
-                    )
-                return split_metas
-            return [img_metas for _ in range(num_augs)]
-        return list(img_metas)
-
-    def merge_aug_masks(aug_masks, img_metas, weights=None):
-        recovered_masks = []
-        for mask, img_meta in zip(aug_masks, normalize_img_metas(img_metas, len(aug_masks))):
-            meta = img_meta[0] if isinstance(img_meta, (list, tuple)) else img_meta
-            flip = meta.get("flip", False)
-            flip_direction = meta.get("flip_direction", None)
-            if flip:
-                if flip_direction == "horizontal":
-                    mask = mask.flip(dims=(-1,)) if isinstance(mask, torch.Tensor) else np.flip(mask, axis=-1)
-                elif flip_direction == "vertical":
-                    mask = mask.flip(dims=(-2,)) if isinstance(mask, torch.Tensor) else np.flip(mask, axis=-2)
-                elif flip_direction == "diagonal":
-                    if isinstance(mask, torch.Tensor):
-                        mask = mask.flip(dims=(-2, -1))
-                    else:
-                        mask = np.flip(np.flip(mask, axis=-2), axis=-1)
-                else:
-                    raise ValueError(f"Invalid flipping direction '{flip_direction}'")
-            recovered_masks.append(mask)
-
-        if isinstance(recovered_masks[0], torch.Tensor):
-            stacked_masks = torch.stack(recovered_masks, dim=0)
-            if weights is None:
-                return stacked_masks.mean(dim=0)
-            weight_tensor = stacked_masks.new_tensor(weights).view(-1, 1, 1, 1, 1)
-            return (stacked_masks * weight_tensor).sum(dim=0) / weight_tensor.sum()
-
-        if weights is None:
-            return np.mean(recovered_masks, axis=0)
-        return np.average(np.array(recovered_masks), axis=0, weights=np.array(weights))
-
-    merge_augs.merge_aug_masks = merge_aug_masks
-    cascade_roi_head.merge_aug_masks = merge_aug_masks
-
-
-def load_tta_detector(config: str, checkpoint: str, device: str):
-    """Build a DetTTAModel without using init_detector's backbone shortcut.
-
-    MMDetection's init_detector assumes cfg.model has a top-level backbone.
-    DetTTAModel stores the real detector under cfg.model.module, so building the
-    wrapper there triggers an AttributeError. Building/loading the base detector
-    first and then wrapping it keeps TTA compatible with the inference API.
-    """
-
-    from mmengine.config import Config
-    from mmengine.registry import init_default_scope
-    from mmengine.runner import load_checkpoint
-    from mmdet.registry import MODELS
-
-    patch_mmdet_tta_mask_merge()
-    cfg = Config.fromfile(config)
-    init_default_scope(cfg.get("default_scope", "mmdet"))
-
-    base_cfg = cfg.model.copy()
-    base_cfg.train_cfg = None
-    base_model = MODELS.build(base_cfg)
-    checkpoint_data = load_checkpoint(base_model, checkpoint, map_location="cpu")
-
-    checkpoint_meta = checkpoint_data.get("meta", {})
-    if "dataset_meta" in checkpoint_meta:
-        base_model.dataset_meta = checkpoint_meta["dataset_meta"]
-    else:
-        base_model.dataset_meta = {"classes": cfg.get("classes", None)}
-
-    tta_cfg = cfg.tta_model.copy()
-    tta_cfg.module = base_model
-    model = MODELS.build(tta_cfg)
-    model.dataset_meta = base_model.dataset_meta
-    cfg.test_pipeline = cfg.tta_pipeline
-    cfg.test_dataloader.dataset.pipeline = cfg.tta_pipeline
-    model.cfg = cfg
-    model.to(device)
-    model.eval()
-    return model
-
-
 def run_inference(model, image_path: Path):
     from mmdet.apis import inference_detector
 
-    return inference_detector(model, str(image_path))
+    if isinstance(image_path, Path):
+        image_path = str(image_path)
+    return inference_detector(model, image_path)
 
 
 def instances_from_result(result):
@@ -168,6 +65,117 @@ def instances_from_result(result):
     labels = pred.labels.numpy()
     masks = pred.masks.numpy() if hasattr(pred, "masks") else None
     return boxes, scores, labels, masks
+
+
+def resize_keep_ratio(image: np.ndarray, target_size: int) -> Tuple[np.ndarray, float]:
+    height, width = image.shape[:2]
+    scale = min(target_size / max(height, 1), target_size / max(width, 1))
+    new_width = max(1, int(round(width * scale)))
+    new_height = max(1, int(round(height * scale)))
+    resized = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_LINEAR)
+    return resized, scale
+
+
+def resize_masks_to_original(masks: np.ndarray, original_shape: Tuple[int, int]) -> np.ndarray:
+    original_height, original_width = original_shape
+    resized_masks = []
+    for mask in masks:
+        resized = cv2.resize(
+            mask.astype(np.uint8),
+            (original_width, original_height),
+            interpolation=cv2.INTER_NEAREST,
+        )
+        resized_masks.append(resized.astype(bool))
+    if not resized_masks:
+        return np.zeros((0, original_height, original_width), dtype=bool)
+    return np.stack(resized_masks, axis=0)
+
+
+def nms_instances(
+    boxes: np.ndarray,
+    scores: np.ndarray,
+    labels: np.ndarray,
+    masks: np.ndarray,
+    iou_threshold: float,
+    max_per_img: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if len(boxes) == 0:
+        return boxes, scores, labels, masks
+
+    import torch
+    from torchvision.ops import nms
+
+    keep_indices = []
+    for label in np.unique(labels):
+        cls_indices = np.where(labels == label)[0]
+        cls_keep = nms(
+            torch.as_tensor(boxes[cls_indices], dtype=torch.float32),
+            torch.as_tensor(scores[cls_indices], dtype=torch.float32),
+            iou_threshold,
+        )
+        keep_indices.extend(cls_indices[cls_keep.cpu().numpy()].tolist())
+
+    keep_indices = sorted(keep_indices, key=lambda idx: float(scores[idx]), reverse=True)
+    keep_indices = keep_indices[:max_per_img]
+    return boxes[keep_indices], scores[keep_indices], labels[keep_indices], masks[keep_indices]
+
+
+def run_manual_tta(
+    model,
+    image: np.ndarray,
+    scales: Sequence[int],
+    use_flip: bool,
+    nms_iou: float,
+    max_per_img: int,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    original_height, original_width = image.shape[:2]
+    all_boxes = []
+    all_scores = []
+    all_labels = []
+    all_masks = []
+
+    for scale_size in scales:
+        resized_image, scale_factor = resize_keep_ratio(image, scale_size)
+        _, resized_width = resized_image.shape[:2]
+        flip_options = (False, True) if use_flip else (False,)
+
+        for flip in flip_options:
+            aug_image = cv2.flip(resized_image, 1) if flip else resized_image
+            result = run_inference(model, aug_image)
+            boxes, scores, labels, masks = instances_from_result(result)
+            if masks is None or len(boxes) == 0:
+                continue
+
+            if flip:
+                x1 = boxes[:, 0].copy()
+                x2 = boxes[:, 2].copy()
+                boxes[:, 0] = resized_width - x2
+                boxes[:, 2] = resized_width - x1
+                masks = np.ascontiguousarray(np.flip(masks, axis=2))
+
+            boxes = boxes / scale_factor
+            boxes[:, 0::2] = np.clip(boxes[:, 0::2], 0, original_width)
+            boxes[:, 1::2] = np.clip(boxes[:, 1::2], 0, original_height)
+            masks = resize_masks_to_original(masks, (original_height, original_width))
+
+            all_boxes.append(boxes)
+            all_scores.append(scores)
+            all_labels.append(labels)
+            all_masks.append(masks)
+
+    if not all_boxes:
+        return (
+            np.zeros((0, 4), dtype=np.float32),
+            np.zeros((0,), dtype=np.float32),
+            np.zeros((0,), dtype=np.int64),
+            np.zeros((0, original_height, original_width), dtype=bool),
+        )
+
+    boxes = np.concatenate(all_boxes, axis=0)
+    scores = np.concatenate(all_scores, axis=0)
+    labels = np.concatenate(all_labels, axis=0)
+    masks = np.concatenate(all_masks, axis=0)
+    return nms_instances(boxes, scores, labels, masks, nms_iou, max_per_img)
 
 
 def parse_args() -> argparse.Namespace:
@@ -208,7 +216,25 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--tta",
         action="store_true",
-        help="Use the config's TTA model/pipeline if supported by installed MMDetection.",
+        help="Use manual multi-scale/flip TTA for instance segmentation.",
+    )
+    parser.add_argument(
+        "--tta-scales",
+        nargs="+",
+        type=int,
+        default=[800, 1000, 1200],
+        help="Square max-side sizes for manual TTA.",
+    )
+    parser.add_argument(
+        "--tta-no-flip",
+        action="store_true",
+        help="Disable horizontal flip inside manual TTA.",
+    )
+    parser.add_argument(
+        "--tta-nms-iou",
+        type=float,
+        default=0.5,
+        help="Per-class bbox NMS IoU for merging manual TTA predictions.",
     )
     return parser.parse_args()
 
@@ -220,20 +246,27 @@ def main() -> None:
         f"TTA={'on' if args.tta else 'off'}, "
         f"adaptive={'on' if args.adaptive else 'off'}"
     )
-    if args.tta:
-        model = load_tta_detector(args.config, args.checkpoint, args.device)
-    else:
-        model = load_detector(args.config, args.checkpoint, args.device)
+    model = load_detector(args.config, args.checkpoint, args.device)
 
     image_infos = json.loads(args.mapping.read_text())
     results = []
     for info in tqdm(image_infos, desc="Infer test"):
         image_path = args.test_dir / info["file_name"]
-        image = cv2.imread(str(image_path), cv2.IMREAD_UNCHANGED)
+        image = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
         if image is None:
             raise RuntimeError(f"Failed to read {image_path}")
-        result = run_inference(model, image_path)
-        boxes, scores, labels, masks = instances_from_result(result)
+        if args.tta:
+            boxes, scores, labels, masks = run_manual_tta(
+                model,
+                image,
+                scales=args.tta_scales,
+                use_flip=not args.tta_no_flip,
+                nms_iou=args.tta_nms_iou,
+                max_per_img=300,
+            )
+        else:
+            result = run_inference(model, image_path)
+            boxes, scores, labels, masks = instances_from_result(result)
         if masks is None:
             continue
 

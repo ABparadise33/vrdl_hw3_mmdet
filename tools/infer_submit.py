@@ -50,6 +50,49 @@ def load_detector(config: str, checkpoint: str, device: str):
     return init_detector(config, checkpoint, device=device)
 
 
+def patch_mmdet_tta_mask_merge() -> None:
+    """Patch MMDetection mask TTA flip merging for torch tensors."""
+
+    import numpy as np
+    import torch
+    import mmdet.models.test_time_augs.merge_augs as merge_augs
+    import mmdet.models.roi_heads.cascade_roi_head as cascade_roi_head
+
+    def merge_aug_masks(aug_masks, img_metas, weights=None):
+        recovered_masks = []
+        for mask, img_meta in zip(aug_masks, img_metas):
+            meta = img_meta[0] if isinstance(img_meta, (list, tuple)) else img_meta
+            flip = meta.get("flip", False)
+            flip_direction = meta.get("flip_direction", None)
+            if flip:
+                if flip_direction == "horizontal":
+                    mask = mask.flip(dims=(-1,)) if isinstance(mask, torch.Tensor) else np.flip(mask, axis=-1)
+                elif flip_direction == "vertical":
+                    mask = mask.flip(dims=(-2,)) if isinstance(mask, torch.Tensor) else np.flip(mask, axis=-2)
+                elif flip_direction == "diagonal":
+                    if isinstance(mask, torch.Tensor):
+                        mask = mask.flip(dims=(-2, -1))
+                    else:
+                        mask = np.flip(np.flip(mask, axis=-2), axis=-1)
+                else:
+                    raise ValueError(f"Invalid flipping direction '{flip_direction}'")
+            recovered_masks.append(mask)
+
+        if isinstance(recovered_masks[0], torch.Tensor):
+            stacked_masks = torch.stack(recovered_masks, dim=0)
+            if weights is None:
+                return stacked_masks.mean(dim=0)
+            weight_tensor = stacked_masks.new_tensor(weights).view(-1, 1, 1, 1, 1)
+            return (stacked_masks * weight_tensor).sum(dim=0) / weight_tensor.sum()
+
+        if weights is None:
+            return np.mean(recovered_masks, axis=0)
+        return np.average(np.array(recovered_masks), axis=0, weights=np.array(weights))
+
+    merge_augs.merge_aug_masks = merge_aug_masks
+    cascade_roi_head.merge_aug_masks = merge_aug_masks
+
+
 def load_tta_detector(config: str, checkpoint: str, device: str):
     """Build a DetTTAModel without using init_detector's backbone shortcut.
 
@@ -64,6 +107,7 @@ def load_tta_detector(config: str, checkpoint: str, device: str):
     from mmengine.runner import load_checkpoint
     from mmdet.registry import MODELS
 
+    patch_mmdet_tta_mask_merge()
     cfg = Config.fromfile(config)
     init_default_scope(cfg.get("default_scope", "mmdet"))
 

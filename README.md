@@ -145,6 +145,33 @@ python tools/find_max_batch_size.py \
 Use the largest passing batch size with a safety margin, or use gradient
 accumulation if you want a larger effective batch size.
 
+## Augmentation Experiments
+
+Run one experiment at a time so the report can compare each added technique
+against the baseline.
+
+```bash
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_vflip.py \
+  --work-dir work_dirs/exp_vflip_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
+
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_rotate90.py \
+  --work-dir work_dirs/exp_rotate90_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
+
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_photometric.py \
+  --work-dir work_dirs/exp_photometric_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
+
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_multiscale.py \
+  --work-dir work_dirs/exp_multiscale_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
+```
+
 ## Inference and Submission
 
 Baseline inference without TTA or adaptive post-processing:

@@ -109,6 +109,20 @@ work_dirs/<run_name>/simple_train_log.csv
 work_dirs/<run_name>/simple_val_log.csv
 ```
 
+For older runs that only have MMEngine logs, plot curves from either source:
+
+```bash
+python tools/plot_curves.py work_dirs/cascade_mask_rcnn_r50_fpn_hw3_bs4_amp
+```
+
+Outputs:
+
+```text
+work_dirs/<run_name>/curves/loss_curve.png
+work_dirs/<run_name>/curves/val_metrics_curve.png
+work_dirs/<run_name>/curves/parsed_scalars.csv
+```
+
 MMEngine prints the system environment, resolved config, and hook order at
 startup. That wall of text is normal and only happens before training begins.
 If you want a quieter start, add `--log-level WARNING`.

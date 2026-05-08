@@ -50,6 +50,46 @@ def load_detector(config: str, checkpoint: str, device: str):
     return init_detector(config, checkpoint, device=device)
 
 
+def load_tta_detector(config: str, checkpoint: str, device: str):
+    """Build a DetTTAModel without using init_detector's backbone shortcut.
+
+    MMDetection's init_detector assumes cfg.model has a top-level backbone.
+    DetTTAModel stores the real detector under cfg.model.module, so building the
+    wrapper there triggers an AttributeError. Building/loading the base detector
+    first and then wrapping it keeps TTA compatible with the inference API.
+    """
+
+    from mmengine.config import Config
+    from mmengine.registry import init_default_scope
+    from mmengine.runner import load_checkpoint
+    from mmdet.registry import MODELS
+
+    cfg = Config.fromfile(config)
+    init_default_scope(cfg.get("default_scope", "mmdet"))
+
+    base_cfg = cfg.model.copy()
+    base_cfg.train_cfg = None
+    base_model = MODELS.build(base_cfg)
+    checkpoint_data = load_checkpoint(base_model, checkpoint, map_location="cpu")
+
+    checkpoint_meta = checkpoint_data.get("meta", {})
+    if "dataset_meta" in checkpoint_meta:
+        base_model.dataset_meta = checkpoint_meta["dataset_meta"]
+    else:
+        base_model.dataset_meta = {"classes": cfg.get("classes", None)}
+
+    tta_cfg = cfg.tta_model.copy()
+    tta_cfg.module = base_model
+    model = MODELS.build(tta_cfg)
+    model.dataset_meta = base_model.dataset_meta
+    cfg.test_pipeline = cfg.tta_pipeline
+    cfg.test_dataloader.dataset.pipeline = cfg.tta_pipeline
+    model.cfg = cfg
+    model.to(device)
+    model.eval()
+    return model
+
+
 def run_inference(model, image_path: Path):
     from mmdet.apis import inference_detector
 
@@ -116,14 +156,7 @@ def main() -> None:
         f"adaptive={'on' if args.adaptive else 'off'}"
     )
     if args.tta:
-        from mmengine.config import Config
-        from mmdet.apis import init_detector
-
-        cfg = Config.fromfile(args.config)
-        cfg.tta_model.module = cfg.model
-        cfg.model = cfg.tta_model
-        cfg.test_dataloader.dataset.pipeline = cfg.tta_pipeline
-        model = init_detector(cfg, args.checkpoint, device=args.device)
+        model = load_tta_detector(args.config, args.checkpoint, args.device)
     else:
         model = load_detector(args.config, args.checkpoint, args.device)
 

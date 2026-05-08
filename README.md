@@ -23,6 +23,7 @@ pip install -U pip
 pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu121
 
 pip install -r requirements.txt
+pip install "numpy<2" --force-reinstall
 mim install "mmengine>=0.7.1" "mmcv==2.1.0" "mmdet==3.3.0"
 
 python - <<'PY'
@@ -130,6 +131,7 @@ conda activate hw3
 pip install -U pip
 pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
+pip install "numpy<2" --force-reinstall
 mim install "mmengine>=0.7.1" "mmcv==2.1.0" "mmdet==3.3.0"
 
 python - <<'PY'

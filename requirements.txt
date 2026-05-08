@@ -1,5 +1,6 @@
 openmim>=0.3.9
 gdown>=4.7.3
+numpy<2
 opencv-python
 pycocotools
 matplotlib

@@ -15,7 +15,10 @@ def try_batch_size(config_path: str, batch_size: int) -> bool:
     cfg = Config.fromfile(config_path)
     cfg = copy.deepcopy(cfg)
     cfg.train_dataloader.batch_size = batch_size
-    cfg.train_cfg = dict(type="IterBasedTrainLoop", max_iters=1, val_interval=1)
+    cfg.train_cfg = dict(type="IterBasedTrainLoop", max_iters=1, val_interval=999999)
+    cfg.val_cfg = None
+    cfg.val_dataloader = None
+    cfg.val_evaluator = None
     cfg.default_hooks.checkpoint = dict(type="CheckpointHook", interval=999999)
     cfg.work_dir = f"/tmp/hw3_batch_probe_bs{batch_size}"
     runner = Runner.from_cfg(cfg)
@@ -54,4 +57,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -17,6 +17,7 @@ from pathlib import Path
 # expandable_segments option can trigger an internal CUDA allocator assert on
 # some vast.ai images, so only cap split size here.
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128")
+os.environ.setdefault("OPENCV_LOG_LEVEL", "SILENT")
 
 from mmengine.config import Config, DictAction
 from mmengine.runner import Runner

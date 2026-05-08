@@ -12,6 +12,7 @@ os.environ.setdefault(
     "PYTORCH_CUDA_ALLOC_CONF",
     "max_split_size_mb:128",
 )
+os.environ.setdefault("OPENCV_LOG_LEVEL", "SILENT")
 
 from mmengine.config import Config, DictAction
 from mmengine.runner import Runner

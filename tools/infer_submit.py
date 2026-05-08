@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import zipfile
 from pathlib import Path
 from typing import Dict, List
+
+os.environ.setdefault("OPENCV_LOG_LEVEL", "SILENT")
 
 import cv2
 import numpy as np

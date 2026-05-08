@@ -168,9 +168,9 @@ def main() -> None:
     args.out_json.write_text(json.dumps(results))
     args.out_zip.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(args.out_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.write(args.out_json, arcname=args.out_json.name)
+        zf.write(args.out_json, arcname="test-results.json")
     print(f"Wrote {len(results)} predictions to {args.out_json}")
-    print(f"Wrote zip submission to {args.out_zip}")
+    print(f"Wrote zip submission to {args.out_zip} as test-results.json")
 
 
 if __name__ == "__main__":

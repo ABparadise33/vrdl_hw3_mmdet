@@ -156,7 +156,9 @@ python inference.py \
 ```
 
 Adaptive mode enables class-wise score thresholds and class-wise area filtering.
-Both modes write compressed COCO RLE submission files.
+Both modes write compressed COCO RLE submission files. The zip filename can be
+experiment-specific, but the JSON inside the zip is always named
+`test-results.json` for CodaBench submission.
 
 ## Full vast.ai Terminal Sequence
 

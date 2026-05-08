@@ -100,7 +100,7 @@ Run this on the 4090 after MMDetection is installed:
 ```bash
 python tools/find_max_batch_size.py \
   configs/cascade_mask_rcnn_r50_fpn_hw3.py \
-  --start 1 --max-batch 16
+  --start 1 --max-batch 16 --amp
 ```
 
 Use the largest passing batch size with a safety margin, or use gradient
@@ -145,11 +145,12 @@ python tools/download_dataset.py
 python tools/convert_hw3_to_coco.py
 
 python tools/find_max_batch_size.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
-  --start 1 --max-batch 16
+  --start 1 --max-batch 16 --amp
 
 python tools/train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
-  --work-dir work_dirs/cascade_mask_rcnn_r50_fpn_hw3 \
-  --cfg-options train_dataloader.batch_size=8
+  --work-dir work_dirs/cascade_mask_rcnn_r50_fpn_hw3_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
 
 python tools/infer_submit.py \
   configs/cascade_mask_rcnn_r50_fpn_hw3.py \

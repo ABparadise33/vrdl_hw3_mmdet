@@ -5,16 +5,34 @@ from __future__ import annotations
 
 import argparse
 import copy
+import os
+
+
+os.environ.setdefault(
+    "PYTORCH_CUDA_ALLOC_CONF",
+    "expandable_segments:True,max_split_size_mb:128",
+)
 
 import torch
 from mmengine.config import Config
 from mmengine.runner import Runner
 
 
-def try_batch_size(config_path: str, batch_size: int) -> bool:
+def enable_amp(cfg: Config) -> None:
+    optim_wrapper = cfg.get("optim_wrapper", {})
+    if optim_wrapper.get("type") == "AmpOptimWrapper":
+        return
+    optim_wrapper["type"] = "AmpOptimWrapper"
+    optim_wrapper.setdefault("loss_scale", "dynamic")
+    cfg.optim_wrapper = optim_wrapper
+
+
+def try_batch_size(config_path: str, batch_size: int, amp: bool) -> bool:
     cfg = Config.fromfile(config_path)
     cfg = copy.deepcopy(cfg)
     cfg.train_dataloader.batch_size = batch_size
+    if amp:
+        enable_amp(cfg)
     cfg.train_cfg = dict(type="IterBasedTrainLoop", max_iters=1, val_interval=999999)
     cfg.val_cfg = None
     cfg.val_dataloader = None
@@ -38,6 +56,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("config")
     parser.add_argument("--start", type=int, default=1)
     parser.add_argument("--max-batch", type=int, default=16)
+    parser.add_argument("--amp", action="store_true")
     return parser.parse_args()
 
 
@@ -46,7 +65,7 @@ def main() -> None:
     best = 0
     for batch_size in range(args.start, args.max_batch + 1):
         print(f"Trying batch_size={batch_size}")
-        if try_batch_size(args.config, batch_size):
+        if try_batch_size(args.config, batch_size, args.amp):
             best = batch_size
             print(f"OK: batch_size={batch_size}")
         else:

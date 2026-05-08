@@ -4,8 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
-from typing import List
+
+
+os.environ.setdefault(
+    "PYTORCH_CUDA_ALLOC_CONF",
+    "expandable_segments:True,max_split_size_mb:128",
+)
 
 from mmengine.config import Config, DictAction
 from mmengine.runner import Runner
@@ -79,4 +85,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

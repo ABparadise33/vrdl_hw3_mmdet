@@ -14,6 +14,7 @@ import gdown
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_URL = "https://drive.google.com/file/d/1uCnJ3LrsBHOeQoJDoe4Yg8H32VuQJodv/view"
+DEFAULT_FILE_ID = "1uCnJ3LrsBHOeQoJDoe4Yg8H32VuQJodv"
 
 
 def extract_archive(archive_path: Path, out_dir: Path) -> None:
@@ -50,6 +51,7 @@ def normalize_data_layout(out_dir: Path) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", default=DEFAULT_URL)
+    parser.add_argument("--file-id", default=DEFAULT_FILE_ID)
     parser.add_argument("--out-dir", type=Path, default=REPO_ROOT / "data")
     parser.add_argument("--archive", type=Path, default=REPO_ROOT / "hw3_dataset")
     return parser.parse_args()
@@ -58,7 +60,19 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     args.out_dir.mkdir(parents=True, exist_ok=True)
-    archive_path = gdown.download(args.url, str(args.archive), quiet=False, fuzzy=True)
+    try:
+        archive_path = gdown.download(
+            args.url,
+            str(args.archive),
+            quiet=False,
+            fuzzy=True,
+        )
+    except TypeError:
+        archive_path = gdown.download(
+            id=args.file_id,
+            output=str(args.archive),
+            quiet=False,
+        )
     if archive_path is None:
         raise RuntimeError("gdown failed to download the dataset.")
     archive = Path(archive_path)

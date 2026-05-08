@@ -18,12 +18,25 @@ Recommended environment on vast.ai:
 conda create -n hw3 python=3.10 -y
 conda activate hw3
 pip install -U pip
+
+# Install PyTorch first. MIM needs torch to detect CUDA and select mmcv wheels.
+pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu121
+
 pip install -r requirements.txt
-mim install mmengine mmcv mmdet
+mim install "mmengine>=0.7.1" "mmcv==2.1.0" "mmdet==3.3.0"
+
+python - <<'PY'
+import torch
+print("torch:", torch.__version__)
+print("cuda available:", torch.cuda.is_available())
+print("cuda:", torch.version.cuda)
+print("gpu:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "none")
+PY
 ```
 
-If CUDA/PyTorch are not already available in the image, install the PyTorch
-build that matches the CUDA version first, then install MMDetection.
+If your vast.ai image already has a working PyTorch install, you can skip the
+PyTorch install line. If the CUDA version is different, use the matching command
+from the PyTorch install selector.
 
 ## Download Dataset
 
@@ -115,8 +128,17 @@ cd <YOUR_REPO_NAME>
 conda create -n hw3 python=3.10 -y
 conda activate hw3
 pip install -U pip
+pip install torch==2.1.2 torchvision==0.16.2 --index-url https://download.pytorch.org/whl/cu121
 pip install -r requirements.txt
-mim install mmengine mmcv mmdet
+mim install "mmengine>=0.7.1" "mmcv==2.1.0" "mmdet==3.3.0"
+
+python - <<'PY'
+import torch
+print("torch:", torch.__version__)
+print("cuda available:", torch.cuda.is_available())
+print("cuda:", torch.version.cuda)
+print("gpu:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "none")
+PY
 
 python tools/download_dataset.py
 python tools/convert_hw3_to_coco.py

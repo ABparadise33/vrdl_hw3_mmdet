@@ -58,9 +58,30 @@ def patch_mmdet_tta_mask_merge() -> None:
     import mmdet.models.test_time_augs.merge_augs as merge_augs
     import mmdet.models.roi_heads.cascade_roi_head as cascade_roi_head
 
+    def normalize_img_metas(img_metas, num_augs):
+        if isinstance(img_metas, dict):
+            split_metas = []
+            has_aug_lists = any(
+                isinstance(value, (list, tuple)) and len(value) == num_augs
+                for value in img_metas.values()
+            )
+            if has_aug_lists:
+                for idx in range(num_augs):
+                    split_metas.append(
+                        {
+                            key: value[idx]
+                            if isinstance(value, (list, tuple)) and len(value) == num_augs
+                            else value
+                            for key, value in img_metas.items()
+                        }
+                    )
+                return split_metas
+            return [img_metas for _ in range(num_augs)]
+        return list(img_metas)
+
     def merge_aug_masks(aug_masks, img_metas, weights=None):
         recovered_masks = []
-        for mask, img_meta in zip(aug_masks, img_metas):
+        for mask, img_meta in zip(aug_masks, normalize_img_metas(img_metas, len(aug_masks))):
             meta = img_meta[0] if isinstance(img_meta, (list, tuple)) else img_meta
             flip = meta.get("flip", False)
             flip_direction = meta.get("flip_direction", None)

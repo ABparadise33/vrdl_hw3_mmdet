@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Train a detector with MMEngine Runner from a local config."""
+"""Train HW3 Cascade Mask R-CNN from the repository root.
+
+This entrypoint keeps the day-to-day command short:
+
+    python train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py --amp
+"""
 
 from __future__ import annotations
 
@@ -8,10 +13,10 @@ import os
 from pathlib import Path
 
 
-os.environ.setdefault(
-    "PYTORCH_CUDA_ALLOC_CONF",
-    "max_split_size_mb:128",
-)
+# Keep the allocator conservative on RTX 4090/PyTorch 2.1.x. The
+# expandable_segments option can trigger an internal CUDA allocator assert on
+# some vast.ai images, so only cap split size here.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128")
 
 from mmengine.config import Config, DictAction
 from mmengine.runner import Runner
@@ -19,18 +24,18 @@ from mmengine.runner import Runner
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("config", help="Path to MMDetection config.")
+    parser.add_argument("config", help="Path to the MMDetection config.")
     parser.add_argument(
         "--work-dir",
         default=None,
-        help="Directory to save logs and checkpoints.",
+        help="Directory for logs and checkpoints.",
     )
     parser.add_argument(
         "--resume",
         nargs="?",
         const="auto",
         default=None,
-        help="Resume from latest checkpoint, or from a given checkpoint path.",
+        help="Resume from the latest checkpoint, or from a given checkpoint path.",
     )
     parser.add_argument(
         "--amp",
@@ -48,7 +53,7 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         action=DictAction,
         default={},
-        help="Override config options, e.g. train_dataloader.batch_size=8.",
+        help="Override config options, e.g. train_dataloader.batch_size=4.",
     )
     return parser.parse_args()
 
@@ -73,19 +78,25 @@ def apply_resume(cfg: Config, resume: str | None) -> None:
 def main() -> None:
     args = parse_args()
     cfg = Config.fromfile(args.config)
+
     if args.cfg_options:
         cfg.merge_from_dict(args.cfg_options)
+
     if args.work_dir is not None:
         cfg.work_dir = args.work_dir
     elif cfg.get("work_dir", None) is None:
-        config_stem = Path(args.config).stem
-        cfg.work_dir = str(Path("work_dirs") / config_stem)
+        cfg.work_dir = str(Path("work_dirs") / Path(args.config).stem)
+
     if args.log_level is not None:
         cfg.log_level = args.log_level
-
     if args.amp:
         enable_amp(cfg)
     apply_resume(cfg, args.resume)
+
+    print(f"Config: {args.config}")
+    print(f"Work dir: {cfg.work_dir}")
+    print(f"Batch size: {cfg.train_dataloader.batch_size}")
+    print(f"AMP: {'on' if args.amp else 'off'}")
 
     runner = Runner.from_cfg(cfg)
     runner.train()

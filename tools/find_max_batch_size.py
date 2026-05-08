@@ -10,7 +10,7 @@ import os
 
 os.environ.setdefault(
     "PYTORCH_CUDA_ALLOC_CONF",
-    "expandable_segments:True,max_split_size_mb:128",
+    "max_split_size_mb:128",
 )
 
 import torch

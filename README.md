@@ -78,10 +78,10 @@ annotations/split_hw3.json
 
 ## Train
 
-Run training through the local wrapper:
+Run training from the repository root:
 
 ```bash
-python tools/train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
   --work-dir work_dirs/cascade_mask_rcnn_r50_fpn_hw3
 ```
 
@@ -92,6 +92,15 @@ The config uses:
 - 4 HW3 foreground classes.
 - Validation by COCO bbox/mask metrics.
 - Epoch-wise checkpointing and metrics logging.
+
+MMEngine prints the system environment, resolved config, and hook order at
+startup. That wall of text is normal and only happens before training begins.
+If you want a quieter start, add `--log-level WARNING`.
+
+For RTX 4090, start with AMP and `train_dataloader.batch_size=2`. If the
+batch-size probe passes cleanly, try 4 next. The scripts set
+`PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128` by default to reduce memory
+fragmentation without using PyTorch's fragile `expandable_segments` mode.
 
 ## Find Max Batch Size
 
@@ -109,7 +118,7 @@ accumulation if you want a larger effective batch size.
 ## Inference and Submission
 
 ```bash
-python tools/infer_submit.py \
+python inference.py \
   configs/cascade_mask_rcnn_r50_fpn_hw3.py \
   work_dirs/cascade_mask_rcnn_r50_fpn_hw3/best_coco_segm_mAP_50_epoch_*.pth \
   --out-json submissions/test-results.json \
@@ -147,12 +156,12 @@ python tools/convert_hw3_to_coco.py
 python tools/find_max_batch_size.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
   --start 1 --max-batch 16 --amp
 
-python tools/train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
-  --work-dir work_dirs/cascade_mask_rcnn_r50_fpn_hw3_bs4_amp \
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
+  --work-dir work_dirs/cascade_mask_rcnn_r50_fpn_hw3_bs2_amp \
   --amp \
-  --cfg-options train_dataloader.batch_size=4
+  --cfg-options train_dataloader.batch_size=2
 
-python tools/infer_submit.py \
+python inference.py \
   configs/cascade_mask_rcnn_r50_fpn_hw3.py \
   work_dirs/cascade_mask_rcnn_r50_fpn_hw3/best_coco_segm_mAP_50_epoch_*.pth \
   --tta

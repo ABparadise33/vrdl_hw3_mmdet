@@ -78,11 +78,10 @@ annotations/split_hw3.json
 
 ## Train
 
-From an MMDetection repository root or an environment where `mim` can run
-MMDetection tools:
+Run training through the local wrapper:
 
 ```bash
-mim train mmdet configs/cascade_mask_rcnn_r50_fpn_hw3.py \
+python tools/train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
   --work-dir work_dirs/cascade_mask_rcnn_r50_fpn_hw3
 ```
 
@@ -148,8 +147,9 @@ python tools/convert_hw3_to_coco.py
 python tools/find_max_batch_size.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
   --start 1 --max-batch 16
 
-mim train mmdet configs/cascade_mask_rcnn_r50_fpn_hw3.py \
-  --work-dir work_dirs/cascade_mask_rcnn_r50_fpn_hw3
+python tools/train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
+  --work-dir work_dirs/cascade_mask_rcnn_r50_fpn_hw3 \
+  --cfg-options train_dataloader.batch_size=8
 
 python tools/infer_submit.py \
   configs/cascade_mask_rcnn_r50_fpn_hw3.py \

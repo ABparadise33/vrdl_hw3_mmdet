@@ -93,6 +93,22 @@ The config uses:
 - Validation by COCO bbox/mask metrics.
 - Epoch-wise checkpointing and metrics logging.
 
+`train.py` adds a concise progress line every 5 iterations by default:
+
+```text
+[train] epoch 2/24 iter 35/84 avg_loss=1.2345 lr=2.50e-03 iter_time=1.80s eta=1m28s
+```
+
+Change the frequency with `--print-interval 1`, or disable it with
+`--no-simple-progress`.
+
+The same concise values are saved for plotting:
+
+```text
+work_dirs/<run_name>/simple_train_log.csv
+work_dirs/<run_name>/simple_val_log.csv
+```
+
 MMEngine prints the system environment, resolved config, and hook order at
 startup. That wall of text is normal and only happens before training begins.
 If you want a quieter start, add `--log-level WARNING`.

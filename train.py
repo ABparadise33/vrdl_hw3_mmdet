@@ -9,6 +9,9 @@ This entrypoint keeps the day-to-day command short:
 from __future__ import annotations
 
 import argparse
+import time
+from collections import defaultdict
+from numbers import Number
 import os
 from pathlib import Path
 
@@ -20,6 +23,7 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "max_split_size_mb:128")
 os.environ.setdefault("OPENCV_LOG_LEVEL", "SILENT")
 
 from mmengine.config import Config, DictAction
+from mmengine.hooks import Hook
 from mmengine.runner import Runner
 
 
@@ -50,6 +54,17 @@ def parse_args() -> argparse.Namespace:
         help="Override MMEngine log level. Use WARNING for a quieter startup.",
     )
     parser.add_argument(
+        "--print-interval",
+        type=int,
+        default=5,
+        help="Print concise training progress every N iterations.",
+    )
+    parser.add_argument(
+        "--no-simple-progress",
+        action="store_true",
+        help="Disable the concise HW3 progress logger.",
+    )
+    parser.add_argument(
         "--cfg-options",
         nargs="+",
         action=DictAction,
@@ -57,6 +72,156 @@ def parse_args() -> argparse.Namespace:
         help="Override config options, e.g. train_dataloader.batch_size=4.",
     )
     return parser.parse_args()
+
+
+def to_float(value) -> float | None:
+    if hasattr(value, "detach"):
+        return float(value.detach().mean().cpu())
+    if isinstance(value, Number):
+        return float(value)
+    return None
+
+
+def format_seconds(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    hours, rem = divmod(seconds, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours:d}h{minutes:02d}m{secs:02d}s"
+    return f"{minutes:d}m{secs:02d}s"
+
+
+def dataloader_batch_size(dataloader) -> int | str:
+    for obj in (dataloader, getattr(dataloader, "batch_sampler", None)):
+        batch_size = getattr(obj, "batch_size", None)
+        if batch_size is not None:
+            return batch_size
+    return "?"
+
+
+class SimpleProgressHook(Hook):
+    """Small HW2-style progress lines for long MMDetection runs."""
+
+    def __init__(self, interval: int = 5) -> None:
+        self.interval = max(1, interval)
+        self.loss_sums = defaultdict(float)
+        self.loss_count = 0
+        self.epoch_start = 0.0
+        self.epoch_iters = 0
+        self.train_csv: Path | None = None
+        self.val_csv: Path | None = None
+
+    def before_run(self, runner) -> None:
+        work_dir = Path(runner.work_dir)
+        work_dir.mkdir(parents=True, exist_ok=True)
+        self.train_csv = work_dir / "simple_train_log.csv"
+        self.val_csv = work_dir / "simple_val_log.csv"
+        if not self.train_csv.exists():
+            self.train_csv.write_text("epoch,iter,total_iters,avg_loss,lr,iter_time,eta_seconds\n")
+        if not self.val_csv.exists():
+            self.val_csv.write_text("epoch,bbox_mAP_50,segm_mAP_50,bbox_mAP,segm_mAP\n")
+
+    def before_train_epoch(self, runner) -> None:
+        self.loss_sums.clear()
+        self.loss_count = 0
+        self.epoch_start = time.time()
+        self.epoch_iters = len(runner.train_dataloader)
+        max_epochs = getattr(runner.train_loop, "max_epochs", "?")
+        print(
+            f"[train] epoch {runner.epoch + 1}/{max_epochs} "
+            f"images={len(runner.train_dataloader.dataset)} "
+            f"iters={self.epoch_iters} "
+            f"batch_size={dataloader_batch_size(runner.train_dataloader)}",
+            flush=True,
+        )
+
+    def after_train_iter(self, runner, batch_idx: int, data_batch=None, outputs=None) -> None:
+        losses = {}
+        if isinstance(outputs, dict):
+            for key, value in outputs.items():
+                if "loss" not in key:
+                    continue
+                scalar = to_float(value)
+                if scalar is not None:
+                    losses[key] = scalar
+
+        if losses:
+            self.loss_count += 1
+            for key, value in losses.items():
+                self.loss_sums[key] += value
+
+        step = batch_idx + 1
+        if step % self.interval != 0 and step != self.epoch_iters:
+            return
+
+        avg_loss = self.average_loss()
+        elapsed = time.time() - self.epoch_start
+        iter_time = elapsed / max(1, step)
+        eta = iter_time * max(0, self.epoch_iters - step)
+        lr = self.current_lr(runner)
+        max_epochs = getattr(runner.train_loop, "max_epochs", "?")
+        eta_seconds = int(max(0, eta))
+        print(
+            f"[train] epoch {runner.epoch + 1}/{max_epochs} "
+            f"iter {step}/{self.epoch_iters} "
+            f"avg_loss={avg_loss:.4f} "
+            f"lr={lr:.2e} "
+            f"iter_time={iter_time:.2f}s "
+            f"eta={format_seconds(eta_seconds)}",
+            flush=True,
+        )
+        if self.train_csv is not None:
+            with self.train_csv.open("a") as f:
+                f.write(
+                    f"{runner.epoch + 1},{step},{self.epoch_iters},"
+                    f"{avg_loss:.6f},{lr:.8g},{iter_time:.4f},{eta_seconds}\n"
+                )
+
+    def after_val_epoch(self, runner, metrics=None) -> None:
+        if not metrics:
+            return
+        wanted = [
+            ("bbox50", "coco/bbox_mAP_50"),
+            ("segm50", "coco/segm_mAP_50"),
+            ("bbox", "coco/bbox_mAP"),
+            ("segm", "coco/segm_mAP"),
+        ]
+        parts = []
+        for label, key in wanted:
+            if key in metrics:
+                parts.append(f"{label}={metrics[key]:.4f}")
+        if parts:
+            print(f"[val] epoch {runner.epoch} " + " ".join(parts), flush=True)
+        if self.val_csv is not None:
+            with self.val_csv.open("a") as f:
+                f.write(
+                    f"{runner.epoch},"
+                    f"{metrics.get('coco/bbox_mAP_50', 0.0):.6f},"
+                    f"{metrics.get('coco/segm_mAP_50', 0.0):.6f},"
+                    f"{metrics.get('coco/bbox_mAP', 0.0):.6f},"
+                    f"{metrics.get('coco/segm_mAP', 0.0):.6f}\n"
+                )
+
+    def average_loss(self) -> float:
+        if self.loss_count == 0:
+            return 0.0
+        if "loss" in self.loss_sums:
+            return self.loss_sums["loss"] / self.loss_count
+        return sum(self.loss_sums.values()) / self.loss_count
+
+    @staticmethod
+    def current_lr(runner) -> float:
+        try:
+            lr_info = runner.optim_wrapper.get_lr()
+        except Exception:
+            return 0.0
+        if isinstance(lr_info, dict):
+            for value in lr_info.values():
+                if isinstance(value, (list, tuple)) and value:
+                    return float(value[0])
+                if isinstance(value, Number):
+                    return float(value)
+        return 0.0
 
 
 def enable_amp(cfg: Config) -> None:
@@ -93,6 +258,8 @@ def main() -> None:
     if args.amp:
         enable_amp(cfg)
     apply_resume(cfg, args.resume)
+    if not args.no_simple_progress:
+        cfg.default_hooks.logger.interval = 1000000
 
     print(f"Config: {args.config}")
     print(f"Work dir: {cfg.work_dir}")
@@ -100,6 +267,8 @@ def main() -> None:
     print(f"AMP: {'on' if args.amp else 'off'}")
 
     runner = Runner.from_cfg(cfg)
+    if not args.no_simple_progress:
+        runner.register_hook(SimpleProgressHook(args.print_interval), priority="LOW")
     runner.train()
 
 

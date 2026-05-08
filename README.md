@@ -133,16 +133,30 @@ accumulation if you want a larger effective batch size.
 
 ## Inference and Submission
 
+Baseline inference without TTA or adaptive post-processing:
+
 ```bash
 python inference.py \
   configs/cascade_mask_rcnn_r50_fpn_hw3.py \
   work_dirs/cascade_mask_rcnn_r50_fpn_hw3/best_coco_segm_mAP_50_epoch_*.pth \
-  --out-json submissions/test-results.json \
-  --out-zip submissions/test-results.zip
+  --out-json submissions/baseline_no_tta_no_adaptive.json \
+  --out-zip submissions/baseline_no_tta_no_adaptive.zip
 ```
 
-The script supports class-wise score thresholds, area filtering, and compressed
-COCO RLE output.
+TTA + adaptive post-processing inference:
+
+```bash
+python inference.py \
+  configs/cascade_mask_rcnn_r50_fpn_hw3.py \
+  work_dirs/cascade_mask_rcnn_r50_fpn_hw3/best_coco_segm_mAP_50_epoch_*.pth \
+  --tta \
+  --adaptive \
+  --out-json submissions/tta_adaptive.json \
+  --out-zip submissions/tta_adaptive.zip
+```
+
+Adaptive mode enables class-wise score thresholds and class-wise area filtering.
+Both modes write compressed COCO RLE submission files.
 
 ## Full vast.ai Terminal Sequence
 
@@ -180,5 +194,6 @@ python train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
 python inference.py \
   configs/cascade_mask_rcnn_r50_fpn_hw3.py \
   work_dirs/cascade_mask_rcnn_r50_fpn_hw3/best_coco_segm_mAP_50_epoch_*.pth \
-  --tta
+  --tta \
+  --adaptive
 ```

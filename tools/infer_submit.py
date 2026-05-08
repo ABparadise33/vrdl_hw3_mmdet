@@ -90,7 +90,15 @@ def parse_args() -> argparse.Namespace:
         "--score-thr",
         type=float,
         default=None,
-        help="Global score threshold. If omitted, class-wise defaults are used.",
+        help=(
+            "Global score threshold. Default is 0.05 without --adaptive; "
+            "with --adaptive, omitted means class-wise thresholds."
+        ),
+    )
+    parser.add_argument(
+        "--adaptive",
+        action="store_true",
+        help="Enable class-wise score thresholds and class-wise area filtering.",
     )
     parser.add_argument(
         "--tta",
@@ -102,6 +110,11 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    print(
+        "Inference mode: "
+        f"TTA={'on' if args.tta else 'off'}, "
+        f"adaptive={'on' if args.adaptive else 'off'}"
+    )
     if args.tta:
         from mmengine.config import Config
         from mmdet.apis import init_detector
@@ -129,15 +142,18 @@ def main() -> None:
         for box, score, label, mask in zip(boxes, scores, labels, masks):
             category_id = int(label) + 1
             threshold = args.score_thr
-            if threshold is None:
+            if args.adaptive and threshold is None:
                 threshold = DEFAULT_SCORE_THRESHOLDS[category_id]
+            elif threshold is None:
+                threshold = 0.05
             if float(score) < threshold:
                 continue
             binary_mask = mask.astype(bool)
-            area = int(binary_mask.sum())
-            area_min, area_max = DEFAULT_AREA_RANGES[category_id]
-            if area < area_min or area > area_max:
-                continue
+            if args.adaptive:
+                area = int(binary_mask.sum())
+                area_min, area_max = DEFAULT_AREA_RANGES[category_id]
+                if area < area_min or area > area_max:
+                    continue
             results.append(
                 {
                     "image_id": int(info["id"]),

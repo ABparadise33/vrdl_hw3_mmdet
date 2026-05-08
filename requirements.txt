@@ -1,0 +1,8 @@
+openmim
+gdown
+opencv-python
+pycocotools
+matplotlib
+pandas
+scikit-learn
+tqdm

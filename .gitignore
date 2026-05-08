@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+
+# Local environments
+.venv/
+venv/
+env/
+
+# Dataset and generated artifacts
+data/
+annotations/
+submissions/
+work_dirs/
+outputs/
+
+# Model checkpoints and logs
+*.pth
+*.pt
+*.pkl
+*.log
+*.log.json
+
+# OS/editor
+.DS_Store
+*.swp
+

@@ -43,6 +43,14 @@ The rotate90 augmentation uses MMDetection's `Albu` wrapper. Keep
 `albumentations==1.3.1`; newer Albumentations versions can raise
 `ValueError: Key img_path is not in available keys`.
 
+If reinstalling Albumentations upgrades NumPy or packaging, repair the
+environment with:
+
+```bash
+pip install "numpy<2" "packaging~=24.0" --force-reinstall
+pip install albumentations==1.3.1 --no-deps
+```
+
 ## Download Dataset
 
 The dataset is hosted on Google Drive. From the repository root:
@@ -125,6 +133,18 @@ Outputs:
 work_dirs/<run_name>/curves/loss_curve.png
 work_dirs/<run_name>/curves/val_metrics_curve.png
 work_dirs/<run_name>/curves/parsed_scalars.csv
+```
+
+Export one row per epoch with averaged train losses and validation AP metrics:
+
+```bash
+python tools/export_epoch_summary.py work_dirs/cascade_mask_rcnn_r50_fpn_hw3_bs4_amp
+```
+
+Output:
+
+```text
+work_dirs/<run_name>/epoch_summary.csv
 ```
 
 MMEngine prints the system environment, resolved config, and hook order at

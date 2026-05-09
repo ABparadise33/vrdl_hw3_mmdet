@@ -39,6 +39,10 @@ If your vast.ai image already has a working PyTorch install, you can skip the
 PyTorch install line. If the CUDA version is different, use the matching command
 from the PyTorch install selector.
 
+The rotate90 augmentation uses MMDetection's `Albu` wrapper. Keep
+`albumentations==1.3.1`; newer Albumentations versions can raise
+`ValueError: Key img_path is not in available keys`.
+
 ## Download Dataset
 
 The dataset is hosted on Google Drive. From the repository root:

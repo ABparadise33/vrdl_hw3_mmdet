@@ -219,6 +219,11 @@ python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_multiscale.py \
   --exp-name exp_multiscale_bs4_amp \
   --amp \
   --cfg-options train_dataloader.batch_size=4
+
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_flip_photometric.py \
+  --exp-name exp_flip_photometric_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
 ```
 
 ## Inference and Submission

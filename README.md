@@ -88,6 +88,26 @@ annotations/image_info_hw3_test.json
 annotations/split_hw3.json
 ```
 
+For the AdamW/cosine baseline that follows the classmate-style training split,
+regenerate annotations with an 85/15 train/val split:
+
+```bash
+python tools/convert_hw3_to_coco.py \
+  --val-ratio 0.15 \
+  --out-dir annotations_adamw85
+```
+
+For the normalized PNG experiment, export p1-p99 normalized 3-channel PNGs and
+matching annotations without modifying the original `data/` folder:
+
+```bash
+python tools/convert_hw3_to_coco.py \
+  --val-ratio 0.15 \
+  --out-dir annotations_norm_png \
+  --export-images-dir data_norm_png \
+  --percentile-normalize
+```
+
 ## Train
 
 Run training from the repository root:
@@ -198,6 +218,35 @@ accumulation if you want a larger effective batch size.
 
 Run one experiment at a time so the report can compare each added technique
 against the baseline.
+
+Classmate-style training baseline: AdamW, cosine LR schedule, 36 epochs. Use
+the 85/15 annotations generated above.
+
+```bash
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_adamw_cosine_85split.py \
+  --exp-name baseline_adamw_cosine_85split_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
+```
+
+Exp1: p1-p99 normalized 3-channel PNGs with the same AdamW/cosine schedule.
+
+```bash
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_adamw_cosine_norm_png.py \
+  --exp-name exp1_norm_png_adamw_cosine_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
+```
+
+Exp2: normalized PNGs plus horizontal flip, vertical flip, and color
+augmentation.
+
+```bash
+python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_adamw_cosine_norm_png_aug.py \
+  --exp-name exp2_norm_png_flip_color_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
+```
 
 ```bash
 python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_vflip.py \

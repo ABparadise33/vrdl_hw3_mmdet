@@ -5,7 +5,7 @@ _base_ = "./cascade_mask_rcnn_r50_fpn_hw3_adamw_cosine_norm_png.py"
 train_pipeline = [
     dict(type="LoadImageFromFile", backend_args=None),
     dict(type="LoadAnnotations", with_bbox=True, with_mask=True),
-    dict(type="Resize", scale=(1333, 800), keep_ratio=True),
+    dict(type="Resize", scale=(1024, 1024), keep_ratio=True),
     dict(type="RandomFlip", prob=0.5, direction="horizontal"),
     dict(type="RandomFlip", prob=0.5, direction="vertical"),
     dict(

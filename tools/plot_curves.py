@@ -11,6 +11,8 @@ from typing import Dict, Iterable, List
 
 import matplotlib.pyplot as plt
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 LOSS_KEYS = (
     "loss",
@@ -141,7 +143,7 @@ def write_records_csv(records: List[Dict], out_path: Path) -> None:
 def main() -> None:
     args = parse_args()
     work_dir = args.work_dir
-    out_dir = args.out_dir or work_dir / "curves"
+    out_dir = args.out_dir or REPO_ROOT / "results" / work_dir.name
 
     simple_train = work_dir / "simple_train_log.csv"
     simple_val = work_dir / "simple_val_log.csv"

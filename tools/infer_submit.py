@@ -182,6 +182,16 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config")
     parser.add_argument("checkpoint")
+    parser.add_argument(
+        "--exp-name",
+        default=None,
+        help="Experiment name. If set, outputs default to results/<exp-name>/.",
+    )
+    parser.add_argument(
+        "--result-name",
+        default=None,
+        help="Output stem under results/<exp-name>/ when --exp-name is used.",
+    )
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--test-dir", type=Path, default=REPO_ROOT / "data/test_release")
     parser.add_argument(
@@ -192,12 +202,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--out-json",
         type=Path,
-        default=REPO_ROOT / "submissions/test-results.json",
+        default=None,
     )
     parser.add_argument(
         "--out-zip",
         type=Path,
-        default=REPO_ROOT / "submissions/test-results.zip",
+        default=None,
     )
     parser.add_argument(
         "--score-thr",
@@ -239,8 +249,40 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def default_result_name(args: argparse.Namespace) -> str:
+    parts = []
+    parts.append("tta" if args.tta else "no_tta")
+    parts.append("adaptive" if args.adaptive else "no_adaptive")
+    return "_".join(parts)
+
+
+def resolve_output_paths(args: argparse.Namespace) -> None:
+    if args.out_json is not None and args.out_zip is not None:
+        return
+    if args.exp_name:
+        out_dir = REPO_ROOT / "results" / args.exp_name
+        stem = args.result_name or default_result_name(args)
+    else:
+        out_dir = REPO_ROOT / "results"
+        stem = args.result_name or "test-results"
+    if args.out_json is None:
+        args.out_json = out_dir / f"{stem}.json"
+    if args.out_zip is None:
+        args.out_zip = out_dir / f"{stem}.zip"
+
+
+def load_image_infos(mapping_path: Path) -> List[Dict]:
+    data = json.loads(mapping_path.read_text())
+    if isinstance(data, dict) and "images" in data:
+        return data["images"]
+    if isinstance(data, list):
+        return data
+    raise ValueError(f"Unsupported mapping format: {mapping_path}")
+
+
 def main() -> None:
     args = parse_args()
+    resolve_output_paths(args)
     print(
         "Inference mode: "
         f"TTA={'on' if args.tta else 'off'}, "
@@ -248,7 +290,7 @@ def main() -> None:
     )
     model = load_detector(args.config, args.checkpoint, args.device)
 
-    image_infos = json.loads(args.mapping.read_text())
+    image_infos = load_image_infos(args.mapping)
     results = []
     for info in tqdm(image_infos, desc="Infer test"):
         image_path = args.test_dir / info["file_name"]

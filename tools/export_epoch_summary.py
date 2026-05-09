@@ -10,6 +10,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, List
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -62,7 +64,7 @@ def average_rows(rows: List[Dict], keys: List[str]) -> Dict[str, float]:
 
 def main() -> None:
     args = parse_args()
-    out_path = args.out or args.work_dir / "epoch_summary.csv"
+    out_path = args.out or REPO_ROOT / "results" / args.work_dir.name / "epoch_summary.csv"
     records = find_records(args.work_dir)
 
     train_by_epoch: Dict[int, List[Dict]] = defaultdict(list)

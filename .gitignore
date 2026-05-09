@@ -14,6 +14,10 @@ annotations/
 submissions/
 work_dirs/
 outputs/
+results/
+logs/
+checkpoints/
+terminal_logs/
 
 # Model checkpoints and logs
 *.pth
@@ -25,4 +29,3 @@ outputs/
 # OS/editor
 .DS_Store
 *.swp
-

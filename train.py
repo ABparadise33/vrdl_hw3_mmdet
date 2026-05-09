@@ -13,6 +13,7 @@ import time
 from collections import defaultdict
 from numbers import Number
 import os
+import sys
 from pathlib import Path
 
 
@@ -27,6 +28,20 @@ from mmengine.hooks import Hook
 from mmengine.runner import Runner
 
 
+class TeeStream:
+    def __init__(self, *streams) -> None:
+        self.streams = streams
+
+    def write(self, data: str) -> None:
+        for stream in self.streams:
+            stream.write(data)
+            stream.flush()
+
+    def flush(self) -> None:
+        for stream in self.streams:
+            stream.flush()
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", help="Path to the MMDetection config.")
@@ -34,6 +49,11 @@ def parse_args() -> argparse.Namespace:
         "--work-dir",
         default=None,
         help="Directory for logs and checkpoints.",
+    )
+    parser.add_argument(
+        "--exp-name",
+        default=None,
+        help="Experiment name. If --work-dir is omitted, checkpoints go to checkpoints/<exp-name>.",
     )
     parser.add_argument(
         "--resume",
@@ -72,6 +92,17 @@ def parse_args() -> argparse.Namespace:
         help="Override config options, e.g. train_dataloader.batch_size=4.",
     )
     return parser.parse_args()
+
+
+def setup_terminal_log(exp_name: str | None):
+    if exp_name is None:
+        return None
+    logs_dir = Path("logs") / exp_name
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    log_file = (logs_dir / "terminal.log").open("a", buffering=1)
+    sys.stdout = TeeStream(sys.stdout, log_file)
+    sys.stderr = TeeStream(sys.stderr, log_file)
+    return log_file
 
 
 def to_float(value) -> float | None:
@@ -243,6 +274,7 @@ def apply_resume(cfg: Config, resume: str | None) -> None:
 
 def main() -> None:
     args = parse_args()
+    setup_terminal_log(args.exp_name)
     cfg = Config.fromfile(args.config)
 
     if args.cfg_options:
@@ -250,6 +282,8 @@ def main() -> None:
 
     if args.work_dir is not None:
         cfg.work_dir = args.work_dir
+    elif args.exp_name is not None:
+        cfg.work_dir = str(Path("checkpoints") / args.exp_name)
     elif cfg.get("work_dir", None) is None:
         cfg.work_dir = str(Path("work_dirs") / Path(args.config).stem)
 
@@ -263,6 +297,9 @@ def main() -> None:
 
     print(f"Config: {args.config}")
     print(f"Work dir: {cfg.work_dir}")
+    if args.exp_name:
+        print(f"Logs dir: logs/{args.exp_name} (run tools/collect_results.py after training)")
+        print(f"Results dir: results/{args.exp_name}")
     print(f"Batch size: {cfg.train_dataloader.batch_size}")
     print(f"AMP: {'on' if args.amp else 'off'}")
 

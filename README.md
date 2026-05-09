@@ -94,7 +94,26 @@ Run training from the repository root:
 
 ```bash
 python train.py configs/cascade_mask_rcnn_r50_fpn_hw3.py \
-  --work-dir work_dirs/cascade_mask_rcnn_r50_fpn_hw3
+  --exp-name baseline_bs4_amp \
+  --amp \
+  --cfg-options train_dataloader.batch_size=4
+```
+
+With `--exp-name`, checkpoints are written to `checkpoints/<exp_name>`.
+After training, collect logs and derived artifacts:
+
+```bash
+python tools/collect_results.py baseline_bs4_amp
+```
+
+This writes:
+
+```text
+checkpoints/<exp_name>/*.pth
+logs/<exp_name>/
+results/<exp_name>/epoch_summary.csv
+results/<exp_name>/loss_curve.png
+results/<exp_name>/val_metrics_curve.png
 ```
 
 The config uses:
@@ -147,6 +166,12 @@ Output:
 work_dirs/<run_name>/epoch_summary.csv
 ```
 
+For the new folder layout, prefer:
+
+```bash
+python tools/collect_results.py <exp_name>
+```
+
 MMEngine prints the system environment, resolved config, and hook order at
 startup. That wall of text is normal and only happens before training begins.
 If you want a quieter start, add `--log-level WARNING`.
@@ -176,22 +201,22 @@ against the baseline.
 
 ```bash
 python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_vflip.py \
-  --work-dir work_dirs/exp_vflip_bs4_amp \
+  --exp-name exp_vflip_bs4_amp \
   --amp \
   --cfg-options train_dataloader.batch_size=4
 
 python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_rotate90.py \
-  --work-dir work_dirs/exp_rotate90_bs4_amp \
+  --exp-name exp_rotate90_bs4_amp \
   --amp \
   --cfg-options train_dataloader.batch_size=4
 
 python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_photometric.py \
-  --work-dir work_dirs/exp_photometric_bs4_amp \
+  --exp-name exp_photometric_bs4_amp \
   --amp \
   --cfg-options train_dataloader.batch_size=4
 
 python train.py configs/cascade_mask_rcnn_r50_fpn_hw3_multiscale.py \
-  --work-dir work_dirs/exp_multiscale_bs4_amp \
+  --exp-name exp_multiscale_bs4_amp \
   --amp \
   --cfg-options train_dataloader.batch_size=4
 ```
@@ -203,9 +228,9 @@ Baseline inference without TTA or adaptive post-processing:
 ```bash
 python inference.py \
   configs/cascade_mask_rcnn_r50_fpn_hw3.py \
-  work_dirs/cascade_mask_rcnn_r50_fpn_hw3/best_coco_segm_mAP_50_epoch_*.pth \
-  --out-json submissions/baseline_no_tta_no_adaptive.json \
-  --out-zip submissions/baseline_no_tta_no_adaptive.zip
+  checkpoints/baseline_bs4_amp/best_coco_segm_mAP_50_epoch_*.pth \
+  --exp-name baseline_bs4_amp \
+  --result-name best_no_tta_no_adaptive
 ```
 
 TTA + adaptive post-processing inference:
@@ -213,11 +238,11 @@ TTA + adaptive post-processing inference:
 ```bash
 python inference.py \
   configs/cascade_mask_rcnn_r50_fpn_hw3.py \
-  work_dirs/cascade_mask_rcnn_r50_fpn_hw3/best_coco_segm_mAP_50_epoch_*.pth \
+  checkpoints/baseline_bs4_amp/best_coco_segm_mAP_50_epoch_*.pth \
+  --exp-name baseline_bs4_amp \
+  --result-name best_tta_adaptive \
   --tta \
-  --adaptive \
-  --out-json submissions/tta_adaptive.json \
-  --out-zip submissions/tta_adaptive.zip
+  --adaptive
 ```
 
 Adaptive mode enables class-wise score thresholds and class-wise area filtering.
@@ -228,6 +253,24 @@ not supported by the built-in wrapper. By default it runs scales
 Both modes write compressed COCO RLE submission files. The zip filename can be
 experiment-specific, but the JSON inside the zip is always named
 `test-results.json` for CodaBench submission.
+
+For validation-set confusion matrix, first write validation predictions, then
+plot the matrix:
+
+```bash
+python inference.py \
+  configs/cascade_mask_rcnn_r50_fpn_hw3.py \
+  checkpoints/baseline_bs4_amp/epoch_24.pth \
+  --mapping annotations/instances_hw3_val.json \
+  --test-dir data/train \
+  --exp-name baseline_bs4_amp \
+  --result-name val_epoch24_no_tta_no_adaptive
+
+python tools/plot_confusion_matrix.py \
+  annotations/instances_hw3_val.json \
+  results/baseline_bs4_amp/val_epoch24_no_tta_no_adaptive.json \
+  --out-dir results/baseline_bs4_amp
+```
 
 ## Full vast.ai Terminal Sequence
 

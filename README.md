@@ -277,6 +277,22 @@ python tools/plot_confusion_matrix.py \
   --out-dir results/baseline_bs4_amp
 ```
 
+Sweep validation score thresholds:
+
+```bash
+python tools/sweep_thresholds.py \
+  configs/cascade_mask_rcnn_r50_fpn_hw3.py \
+  checkpoints/baseline_bs4_amp/epoch_24.pth \
+  --exp-name baseline_bs4_amp \
+  --thresholds 0.01 0.03 0.05 0.08 0.10 0.15 0.20 0.25 0.30 0.35 0.40
+```
+
+Output:
+
+```text
+results/<exp_name>/threshold_sweep.csv
+```
+
 ## Full vast.ai Terminal Sequence
 
 ```bash

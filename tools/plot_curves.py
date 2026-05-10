@@ -56,6 +56,33 @@ def read_csv(path: Path) -> List[Dict[str, float]]:
     return rows
 
 
+def add_training_x_axes(rows: List[Dict]) -> None:
+    """Add monotonic x-axes for per-epoch iteration logs.
+
+    simple_train_log.csv records `iter` inside each epoch, so plotting directly
+    against `iter` makes the line jump back to the left at every new epoch.
+    """
+    epoch_offsets: Dict[float, float] = {}
+    cumulative = 0.0
+    for row in rows:
+        epoch = numeric(row.get("epoch"))
+        if epoch is None or epoch in epoch_offsets:
+            continue
+        epoch_offsets[epoch] = cumulative
+        total_iters = numeric(row.get("total_iters")) or 0.0
+        cumulative += total_iters
+
+    for row in rows:
+        epoch = numeric(row.get("epoch"))
+        iteration = numeric(row.get("iter"))
+        total_iters = numeric(row.get("total_iters"))
+        if epoch is None or iteration is None:
+            continue
+        row["global_iter"] = epoch_offsets.get(epoch, 0.0) + iteration
+        if total_iters:
+            row["epoch_progress"] = epoch - 1.0 + iteration / total_iters
+
+
 def load_json_records(path: Path) -> List[Dict]:
     text = path.read_text().strip()
     if not text:
@@ -151,7 +178,15 @@ def main() -> None:
     made_any = False
     if simple_train.exists():
         rows = read_csv(simple_train)
-        made_any |= plot_lines(rows, "iter", ["avg_loss"], out_dir / "loss_curve.png", "Training Loss")
+        add_training_x_axes(rows)
+        x_key = "epoch_progress" if rows and "epoch_progress" in rows[0] else "iter"
+        made_any |= plot_lines(
+            rows,
+            x_key,
+            ["avg_loss"],
+            out_dir / "loss_curve.png",
+            "Training Loss",
+        )
     if simple_val.exists():
         rows = read_csv(simple_val)
         made_any |= plot_lines(

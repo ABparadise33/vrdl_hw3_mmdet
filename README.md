@@ -68,28 +68,42 @@ data/
   test_image_name_to_ids.json
 ```
 
-## Prepare COCO Annotations
+## Prepare Dataset Once
 
-From the repository root:
+For the current best experiment path, prepare normalized PNG images and COCO
+annotations once:
+
+```bash
+python tools/prepare_norm_png_dataset.py
+```
+
+This reads the raw TIFF dataset under `data/`, writes normalized PNGs to
+`data_norm_png/`, and writes COCO JSON files to `annotations_norm_png/`. It does
+not modify the original `data/` folder. The script skips conversion when all
+outputs already exist, so it is safe to run before experiments.
+
+Generated files:
+
+```text
+data_norm_png/train/*.png
+data_norm_png/val/*.png
+data_norm_png/test_release/*.png
+annotations_norm_png/instances_hw3_train.json
+annotations_norm_png/instances_hw3_val.json
+annotations_norm_png/image_info_hw3_test.json
+annotations_norm_png/split_hw3.json
+```
+
+The conversion is paid once. During training, the normalized PNG configs read
+`data_norm_png/` directly; they do not redo p1-p99 normalization every epoch.
+
+If you need the original raw-TIFF COCO annotations for older ablations:
 
 ```bash
 python tools/convert_hw3_to_coco.py
 ```
 
-This reads `data/train`, writes COCO JSON files to `annotations`, and
-does not modify the original dataset.
-
-Generated files:
-
-```text
-annotations/instances_hw3_train.json
-annotations/instances_hw3_val.json
-annotations/image_info_hw3_test.json
-annotations/split_hw3.json
-```
-
-For the AdamW/cosine baseline that follows the classmate-style training split,
-regenerate annotations with an 85/15 train/val split:
+For the raw-TIFF AdamW/cosine baseline with an 85/15 train/val split:
 
 ```bash
 python tools/convert_hw3_to_coco.py \
@@ -97,8 +111,7 @@ python tools/convert_hw3_to_coco.py \
   --out-dir annotations_adamw85
 ```
 
-For the normalized PNG experiment, export p1-p99 normalized 3-channel PNGs and
-matching annotations without modifying the original `data/` folder:
+The normalized PNG prepare command is equivalent to:
 
 ```bash
 python tools/convert_hw3_to_coco.py \

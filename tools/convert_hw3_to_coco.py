@@ -14,6 +14,7 @@ os.environ.setdefault("OPENCV_LOG_LEVEL", "SILENT")
 
 import cv2
 import numpy as np
+from pycocotools import mask as mask_utils
 from tqdm import tqdm
 
 
@@ -104,6 +105,22 @@ def polygons_from_mask(binary_mask: np.ndarray, simplify_eps: float) -> List[Lis
     return polygons
 
 
+def rle_from_mask(binary_mask: np.ndarray) -> Dict:
+    rle = mask_utils.encode(np.asfortranarray(binary_mask.astype(np.uint8)))
+    rle["counts"] = rle["counts"].decode("utf-8")
+    return rle
+
+
+def segmentation_from_mask(
+    binary_mask: np.ndarray,
+    simplify_eps: float,
+    segmentation_format: str,
+) -> List[List[float]] | Dict:
+    if segmentation_format == "rle":
+        return rle_from_mask(binary_mask)
+    return polygons_from_mask(binary_mask, simplify_eps)
+
+
 def bbox_from_mask(binary_mask: np.ndarray) -> List[int]:
     ys, xs = np.where(binary_mask)
     x_min = int(xs.min())
@@ -135,7 +152,11 @@ def image_record(
 
 
 def iter_annotations(
-    image_id: int, image_dir: Path, simplify_eps: float, min_area: int
+    image_id: int,
+    image_dir: Path,
+    simplify_eps: float,
+    min_area: int,
+    segmentation_format: str,
 ) -> Iterable[Dict]:
     for category_id in range(1, 5):
         mask_path = image_dir / f"class{category_id}.tif"
@@ -149,7 +170,9 @@ def iter_annotations(
             area = int(binary_mask.sum())
             if area < min_area:
                 continue
-            segmentation = polygons_from_mask(binary_mask, simplify_eps)
+            segmentation = segmentation_from_mask(
+                binary_mask, simplify_eps, segmentation_format
+            )
             if not segmentation:
                 continue
             yield {
@@ -169,13 +192,16 @@ def make_coco(
     min_area: int,
     export_dir: Path | None,
     normalize: bool,
+    segmentation_format: str,
 ) -> Dict:
     images: List[Dict] = []
     annotations: List[Dict] = []
     ann_id = 1
     for image_id, image_dir in enumerate(tqdm(image_dirs, desc="Converting"), start=1):
         images.append(image_record(image_id, image_dir, split, export_dir, normalize))
-        for annotation in iter_annotations(image_id, image_dir, simplify_eps, min_area):
+        for annotation in iter_annotations(
+            image_id, image_dir, simplify_eps, min_area, segmentation_format
+        ):
             annotation["id"] = ann_id
             annotations.append(annotation)
             ann_id += 1
@@ -242,6 +268,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--min-area", type=int, default=1)
     parser.add_argument(
+        "--segmentation-format",
+        choices=("polygon", "rle"),
+        default="polygon",
+        help="Store masks as COCO polygons or compressed RLE. RLE preserves dense cell masks better.",
+    )
+    parser.add_argument(
         "--simplify-eps",
         type=float,
         default=0.0,
@@ -279,6 +311,7 @@ def main() -> None:
         args.min_area,
         args.export_images_dir,
         args.percentile_normalize,
+        args.segmentation_format,
     )
     val_json = make_coco(
         val_dirs,
@@ -287,6 +320,7 @@ def main() -> None:
         args.min_area,
         args.export_images_dir,
         args.percentile_normalize,
+        args.segmentation_format,
     )
     (args.out_dir / "instances_hw3_train.json").write_text(json.dumps(train_json))
     (args.out_dir / "instances_hw3_val.json").write_text(json.dumps(val_json))
@@ -305,6 +339,8 @@ def main() -> None:
             {
                 "seed": args.seed,
                 "val_ratio": args.val_ratio,
+                "min_area": args.min_area,
+                "segmentation_format": args.segmentation_format,
                 "train": [path.name for path in train_dirs],
                 "val": [path.name for path in val_dirs],
             },

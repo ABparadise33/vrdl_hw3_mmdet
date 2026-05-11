@@ -44,6 +44,21 @@ def xyxy_to_xywh(box: np.ndarray) -> List[float]:
     return [x1, y1, max(0.0, x2 - x1), max(0.0, y2 - y1)]
 
 
+def mask_to_xywh(binary_mask: np.ndarray) -> List[float] | None:
+    ys, xs = np.where(binary_mask)
+    if len(xs) == 0:
+        return None
+    x_min = int(xs.min())
+    x_max = int(xs.max()) + 1
+    y_min = int(ys.min())
+    y_max = int(ys.max()) + 1
+    width = x_max - x_min
+    height = y_max - y_min
+    if width <= 0 or height <= 0:
+        return None
+    return [float(x_min), float(y_min), float(width), float(height)]
+
+
 def load_detector(config: str, checkpoint: str, device: str):
     from mmdet.apis import init_detector
 
@@ -246,6 +261,11 @@ def parse_args() -> argparse.Namespace:
         default=0.5,
         help="Per-class bbox NMS IoU for merging manual TTA predictions.",
     )
+    parser.add_argument(
+        "--bbox-from-mask",
+        action="store_true",
+        help="Recompute submission bbox from the final binary mask.",
+    )
     return parser.parse_args()
 
 
@@ -327,10 +347,13 @@ def main() -> None:
                 area_min, area_max = DEFAULT_AREA_RANGES[category_id]
                 if area < area_min or area > area_max:
                     continue
+            bbox = mask_to_xywh(binary_mask) if args.bbox_from_mask else xyxy_to_xywh(box)
+            if bbox is None:
+                continue
             results.append(
                 {
                     "image_id": int(info["id"]),
-                    "bbox": xyxy_to_xywh(box),
+                    "bbox": bbox,
                     "score": float(score),
                     "category_id": category_id,
                     "segmentation": encode_mask(binary_mask),
